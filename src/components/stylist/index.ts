@@ -1,0 +1,1 @@
+export { StylistChat } from "./StylistChat";
