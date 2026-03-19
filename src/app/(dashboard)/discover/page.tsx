@@ -13,6 +13,13 @@ import {
 import { Heart, X, Loader2, ShirtIcon, Sparkles } from "lucide-react";
 
 const WARDROBE_API = "http://localhost:5000/api/wardrobe";
+const OCCASION_TABS = ["Casual", "Formal", "Party"] as const;
+type OccasionTab = (typeof OCCASION_TABS)[number];
+const OCCASION_FILTER_MAP: Record<OccasionTab, string> = {
+  Casual: "Casuals",
+  Formal: "Formals",
+  Party: "Party",
+};
 
 // ── Types ────────────────────────────────────────────────
 
@@ -21,6 +28,7 @@ interface WardrobeItem {
   name: string;
   category: string;
   color: string;
+  occasionTags?: string[];
   imageBase64?: string;
   imageUrl?: string;
 }
@@ -28,17 +36,18 @@ interface WardrobeItem {
 interface OutfitCombo {
   id: string;
   name: string;
+  blazer?: WardrobeItem;
   top: WardrobeItem;
   bottom: WardrobeItem;
   shoes: WardrobeItem;
 }
 
-// ── Build ALL combos (top × bottom × shoes) ─────────────
+// ── Build combos ─────────────────────────────────────────
 
-function buildAllCombos(items: WardrobeItem[]): OutfitCombo[] {
-  const tops = items.filter((i) => i.category?.toLowerCase().includes("top"));
-  const bottoms = items.filter((i) => i.category?.toLowerCase().includes("bottom"));
-  const shoes = items.filter((i) => i.category?.toLowerCase().includes("shoe"));
+function buildThreePieceCombos(items: WardrobeItem[]): OutfitCombo[] {
+  const tops = items.filter((i) => i.category?.toLowerCase() === "tops");
+  const bottoms = items.filter((i) => i.category?.toLowerCase() === "bottoms");
+  const shoes = items.filter((i) => i.category?.toLowerCase() === "shoes");
 
   if (tops.length === 0 || bottoms.length === 0 || shoes.length === 0) return [];
 
@@ -65,6 +74,62 @@ function buildAllCombos(items: WardrobeItem[]): OutfitCombo[] {
   }
 
   return combos;
+}
+
+function buildFormalCombos(items: WardrobeItem[]): { combos: OutfitCombo[]; hasBlazer: boolean } {
+  const blazers = items.filter(
+    (i) =>
+      i.category?.toLowerCase() === "blazer" ||
+      (i.category?.toLowerCase() === "tops" && i.name?.toLowerCase().includes("blazer")),
+  );
+
+  const formalBlazer = blazers.filter((i) => i.occasionTags?.includes("Formals"));
+  const formalTops = items.filter(
+    (i) =>
+      i.category?.toLowerCase() === "tops" &&
+      i.occasionTags?.includes("Formals") &&
+      !i.name?.toLowerCase().includes("blazer"),
+  );
+  const formalBottoms = items.filter(
+    (i) => i.category?.toLowerCase() === "bottoms" && i.occasionTags?.includes("Formals"),
+  );
+  const formalShoes = items.filter(
+    (i) => i.category?.toLowerCase() === "shoes" && i.occasionTags?.includes("Formals"),
+  );
+
+  if (formalTops.length === 0 || formalBottoms.length === 0 || formalShoes.length === 0) {
+    return { combos: [], hasBlazer: formalBlazer.length > 0 };
+  }
+
+  if (formalBlazer.length === 0) {
+    return { combos: [], hasBlazer: false };
+  }
+
+  const combos: OutfitCombo[] = [];
+  let idx = 0;
+  for (const blazer of formalBlazer) {
+    for (const top of formalTops) {
+      for (const bottom of formalBottoms) {
+        for (const shoe of formalShoes) {
+          combos.push({
+            id: `formal-combo-${idx++}`,
+            name: `${blazer.name} + ${top.name} + ${bottom.name}`,
+            blazer,
+            top,
+            bottom,
+            shoes: shoe,
+          });
+        }
+      }
+    }
+  }
+
+  for (let i = combos.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [combos[i], combos[j]] = [combos[j], combos[i]];
+  }
+
+  return { combos, hasBlazer: true };
 }
 
 function getImgSrc(item: WardrobeItem): string {
@@ -98,6 +163,8 @@ function OutfitSwipeCard({
     else if (info.offset.x < -SWIPE_THRESHOLD) onSwipeComplete("left");
   }
 
+  const isFormalFourPiece = Boolean(combo.blazer);
+
   return (
     <motion.div
       className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
@@ -120,70 +187,154 @@ function OutfitSwipeCard({
     >
       <div className="relative w-full h-full rounded-2xl overflow-hidden border border-[#233554] shadow-2xl bg-[#16213e]">
         {/* Outfit collage */}
-        <div className="relative w-full h-[72%] grid grid-cols-2 grid-rows-2 gap-1 p-2 bg-[#1a1a2e]">
-          {/* Top — top left */}
-          <div className="relative rounded-xl overflow-hidden border border-[#233554]">
-            {getImgSrc(combo.top) ? (
-              <Image
-                src={getImgSrc(combo.top)}
-                alt={combo.top.name}
-                fill
-                className="object-cover"
-                sizes="180px"
-                unoptimized
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
-                <ShirtIcon className="w-8 h-8 text-[#233554]" />
-              </div>
-            )}
-            <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
-              👕 Top
-            </span>
-          </div>
+        {isFormalFourPiece ? (
+          <div className="relative w-full h-[72%] grid grid-cols-2 grid-rows-3 gap-1 p-2 bg-[#1a1a2e]">
+            <div className="relative col-span-2 rounded-xl overflow-hidden border border-[#233554]">
+              {combo.blazer && getImgSrc(combo.blazer) ? (
+                <Image
+                  src={getImgSrc(combo.blazer)}
+                  alt={combo.blazer.name}
+                  fill
+                  className="object-cover"
+                  sizes="180px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                Blazer
+              </span>
+            </div>
 
-          {/* Bottom — top right */}
-          <div className="relative rounded-xl overflow-hidden border border-[#233554]">
-            {getImgSrc(combo.bottom) ? (
-              <Image
-                src={getImgSrc(combo.bottom)}
-                alt={combo.bottom.name}
-                fill
-                className="object-cover"
-                sizes="180px"
-                unoptimized
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
-                <ShirtIcon className="w-8 h-8 text-[#233554]" />
-              </div>
-            )}
-            <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
-              👖 Bottom
-            </span>
-          </div>
+            <div className="relative rounded-xl overflow-hidden border border-[#233554]">
+              {getImgSrc(combo.top) ? (
+                <Image
+                  src={getImgSrc(combo.top)}
+                  alt={combo.top.name}
+                  fill
+                  className="object-cover"
+                  sizes="180px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                Top
+              </span>
+            </div>
 
-          {/* Shoes — bottom center (spans 2 cols) */}
-          <div className="relative col-span-2 rounded-xl overflow-hidden border border-[#233554]">
-            {getImgSrc(combo.shoes) ? (
-              <Image
-                src={getImgSrc(combo.shoes)}
-                alt={combo.shoes.name}
-                fill
-                className="object-cover"
-                sizes="360px"
-                unoptimized
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
-                <ShirtIcon className="w-8 h-8 text-[#233554]" />
-              </div>
-            )}
-            <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
-              👟 Shoes
-            </span>
+            <div className="relative rounded-xl overflow-hidden border border-[#233554]">
+              {getImgSrc(combo.bottom) ? (
+                <Image
+                  src={getImgSrc(combo.bottom)}
+                  alt={combo.bottom.name}
+                  fill
+                  className="object-cover"
+                  sizes="180px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                Bottom
+              </span>
+            </div>
+
+            <div className="relative col-span-2 rounded-xl overflow-hidden border border-[#233554]">
+              {getImgSrc(combo.shoes) ? (
+                <Image
+                  src={getImgSrc(combo.shoes)}
+                  alt={combo.shoes.name}
+                  fill
+                  className="object-cover"
+                  sizes="360px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                Shoes
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="relative w-full h-[72%] grid grid-cols-2 grid-rows-2 gap-1 p-2 bg-[#1a1a2e]">
+            {/* Top — top left */}
+            <div className="relative rounded-xl overflow-hidden border border-[#233554]">
+              {getImgSrc(combo.top) ? (
+                <Image
+                  src={getImgSrc(combo.top)}
+                  alt={combo.top.name}
+                  fill
+                  className="object-cover"
+                  sizes="180px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                👕 Top
+              </span>
+            </div>
+
+            {/* Bottom — top right */}
+            <div className="relative rounded-xl overflow-hidden border border-[#233554]">
+              {getImgSrc(combo.bottom) ? (
+                <Image
+                  src={getImgSrc(combo.bottom)}
+                  alt={combo.bottom.name}
+                  fill
+                  className="object-cover"
+                  sizes="180px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                👖 Bottom
+              </span>
+            </div>
+
+            {/* Shoes — bottom center (spans 2 cols) */}
+            <div className="relative col-span-2 rounded-xl overflow-hidden border border-[#233554]">
+              {getImgSrc(combo.shoes) ? (
+                <Image
+                  src={getImgSrc(combo.shoes)}
+                  alt={combo.shoes.name}
+                  fill
+                  className="object-cover"
+                  sizes="360px"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-[#16213e]">
+                  <ShirtIcon className="w-8 h-8 text-[#233554]" />
+                </div>
+              )}
+              <span className="absolute bottom-1 left-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm">
+                👟 Shoes
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Like overlay */}
         <motion.div
@@ -211,6 +362,7 @@ function OutfitSwipeCard({
         <div className="absolute bottom-0 left-0 right-0 px-5 pb-4 pt-2">
           <h3 className="text-lg font-bold text-white truncate">{combo.name}</h3>
           <p className="text-[#8899aa] text-xs mt-0.5">
+            {combo.blazer ? `${combo.blazer.name} · ` : ""}
             {combo.top.name} · {combo.bottom.name} · {combo.shoes.name}
           </p>
         </div>
@@ -228,13 +380,33 @@ export default function DiscoverPage() {
   const [loading, setLoading] = useState(true);
   const [savedCount, setSavedCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
+  const [selectedOccasion, setSelectedOccasion] = useState<OccasionTab>("Casual");
+  const [showFormalBlazerHint, setShowFormalBlazerHint] = useState(false);
 
-  const hasCats = useMemo(() => {
-    const hasTop = items.some((i) => i.category?.toLowerCase().includes("top"));
-    const hasBottom = items.some((i) => i.category?.toLowerCase().includes("bottom"));
-    const hasShoe = items.some((i) => i.category?.toLowerCase().includes("shoe"));
-    return hasTop && hasBottom && hasShoe;
-  }, [items]);
+  const occasionFilteredItems = useMemo(() => {
+    const selectedTag = OCCASION_FILTER_MAP[selectedOccasion];
+    return items.filter((item) => {
+      return Array.isArray(item.occasionTags) && item.occasionTags.includes(selectedTag);
+    });
+  }, [items, selectedOccasion]);
+
+  const occasionTops = useMemo(
+    () => occasionFilteredItems.filter((i) => i.category?.toLowerCase() === "tops"),
+    [occasionFilteredItems],
+  );
+
+  const occasionBottoms = useMemo(
+    () => occasionFilteredItems.filter((i) => i.category?.toLowerCase() === "bottoms"),
+    [occasionFilteredItems],
+  );
+
+  const occasionShoes = useMemo(
+    () => occasionFilteredItems.filter((i) => i.category?.toLowerCase() === "shoes"),
+    [occasionFilteredItems],
+  );
+
+  const hasOccasionCategories =
+    occasionTops.length > 0 && occasionBottoms.length > 0 && occasionShoes.length > 0;
 
   useEffect(() => {
     async function load() {
@@ -243,13 +415,7 @@ export default function DiscoverPage() {
         if (!res.ok) throw new Error("fetch failed");
         const data = await res.json();
         const fetched: WardrobeItem[] = data.items || [];
-        console.log("[Discover] API returned", fetched.length, "items");
-        console.log("[Discover] Categories:", fetched.map((i) => `${i.name}: '${i.category}'`));
         setItems(fetched);
-        const allCombos = buildAllCombos(fetched);
-        console.log("[Discover] Generated", allCombos.length, "combos");
-        setCombos(allCombos);
-        setTotalCombos(allCombos.length);
       } catch {
         setItems([]);
         setCombos([]);
@@ -259,6 +425,22 @@ export default function DiscoverPage() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (selectedOccasion === "Formal") {
+      const { combos: formalCombos, hasBlazer } = buildFormalCombos(items);
+      setCombos(formalCombos);
+      setTotalCombos(formalCombos.length);
+      setShowFormalBlazerHint(!hasBlazer);
+    } else {
+      const allOccasionCombos = buildThreePieceCombos(occasionFilteredItems);
+      setCombos(allOccasionCombos);
+      setTotalCombos(allOccasionCombos.length);
+      setShowFormalBlazerHint(false);
+    }
+    setSavedCount(0);
+    setSkippedCount(0);
+  }, [items, occasionFilteredItems, selectedOccasion]);
 
   const currentIndex = totalCombos - combos.length;
 
@@ -317,6 +499,28 @@ export default function DiscoverPage() {
             )}
           </div>
         </div>
+
+        {/* Occasion tabs */}
+        <div className="max-w-md mx-auto px-4 pb-4">
+          <div className="grid grid-cols-3 gap-2">
+            {OCCASION_TABS.map((tab) => {
+              const isActive = selectedOccasion === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setSelectedOccasion(tab)}
+                  className={`py-2.5 rounded-xl text-sm transition-colors ${
+                    isActive
+                      ? "bg-[#e94560] text-white font-bold"
+                      : "bg-[#16213e] text-[#8899aa] font-medium"
+                  }`}
+                >
+                  {tab}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </header>
 
       {/* Main */}
@@ -326,16 +530,14 @@ export default function DiscoverPage() {
             <Loader2 className="w-10 h-10 text-[#e94560] animate-spin" />
             <p className="text-[#8899aa] text-sm mt-4">Loading your outfits...</p>
           </div>
-        ) : !hasCats ? (
+        ) : !hasOccasionCategories ? (
           <div className="flex flex-col items-center justify-center h-[520px] text-center">
             <ShirtIcon className="w-16 h-16 text-[#233554] mb-4" />
             <h3 className="text-xl font-bold text-white mb-2">
-              Need More Clothes!
+              Not enough {selectedOccasion} items.
             </h3>
             <p className="text-[#8899aa] text-sm max-w-xs mb-6">
-              Add at least one <span className="text-[#e94560]">Top</span>,{" "}
-              <span className="text-[#e94560]">Bottom</span> and{" "}
-              <span className="text-[#e94560]">Shoes</span> to generate outfit combinations.
+              You need at least 1 Top, 1 Bottom and 1 Shoes tagged as {selectedOccasion} to see combinations.
             </p>
             <Link
               href="/wardrobe"
@@ -356,9 +558,17 @@ export default function DiscoverPage() {
             </p>
             <button
               onClick={() => {
-                const allCombos = buildAllCombos(items);
-                setCombos(allCombos);
-                setTotalCombos(allCombos.length);
+                if (selectedOccasion === "Formal") {
+                  const { combos: formalCombos, hasBlazer } = buildFormalCombos(items);
+                  setCombos(formalCombos);
+                  setTotalCombos(formalCombos.length);
+                  setShowFormalBlazerHint(!hasBlazer);
+                } else {
+                  const allCombos = buildThreePieceCombos(occasionFilteredItems);
+                  setCombos(allCombos);
+                  setTotalCombos(allCombos.length);
+                  setShowFormalBlazerHint(false);
+                }
                 setSavedCount(0);
                 setSkippedCount(0);
               }}
@@ -369,6 +579,16 @@ export default function DiscoverPage() {
           </div>
         ) : (
           <div className="flex flex-col items-center">
+            <p className="w-full text-sm text-[#8899aa] mb-3 text-center">
+              Showing <span className="text-white font-semibold">{totalCombos}</span> combinations for <span className="text-white font-semibold">{selectedOccasion}</span>
+            </p>
+
+            {selectedOccasion === "Formal" && showFormalBlazerHint && (
+              <p className="w-full text-xs text-[#f59e0b] mb-3 text-center">
+                Add a Blazer for complete formal looks!
+              </p>
+            )}
+
             {/* Progress bar */}
             <div className="w-full mb-4">
               <div className="w-full h-1.5 rounded-full bg-[#233554] overflow-hidden">

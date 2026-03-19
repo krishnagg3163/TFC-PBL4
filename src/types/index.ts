@@ -5,6 +5,7 @@ export type ClothingCategory =
   | "bottoms"
   | "shoes"
   | "accessories"
+  | "blazer"
   | "outerwear"
   | "dresses"
   | "activewear"

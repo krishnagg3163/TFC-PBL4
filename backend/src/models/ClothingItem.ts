@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IClothingItem extends Document {
   userId: string;
   name: string;
-  category: "tops" | "bottoms" | "shoes" | "accessories" | "outerwear" | "dresses" | "activewear" | "formal";
+  category: "tops" | "bottoms" | "shoes" | "accessories" | "outerwear" | "dresses" | "activewear" | "formal" | "blazer";
   color: string;
   secondaryColor?: string;
   imageUrl?: string;
@@ -30,7 +30,7 @@ const ClothingItemSchema = new Schema<IClothingItem>(
     category: {
       type: String,
       required: true,
-      enum: ["tops", "bottoms", "shoes", "accessories", "outerwear", "dresses", "activewear", "formal"],
+      enum: ["tops", "bottoms", "shoes", "accessories", "outerwear", "dresses", "activewear", "formal", "blazer"],
     },
     color: { type: String, required: true },
     secondaryColor: { type: String },

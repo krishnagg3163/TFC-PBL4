@@ -27,6 +27,7 @@ interface BackendItem {
   name: string;
   category: string;
   color: string;
+  occasions?: string[];
   imageBase64?: string;
   imageUrl?: string;
   createdAt: string;
@@ -58,6 +59,7 @@ const CATEGORIES = [
   { key: "bottoms" as const, label: "Bottoms", emoji: "👖" },
   { key: "shoes" as const, label: "Shoes", emoji: "👟" },
   { key: "accessories" as const, label: "Accessories", emoji: "💍" },
+  { key: "blazer" as const, label: "Blazer", emoji: "🧥" },
 ];
 
 type CategoryKey = "all" | ClothingCategory;
@@ -72,11 +74,35 @@ const CATEGORY_OPTIONS: { value: ClothingCategory; label: string }[] = [
   { value: "bottoms", label: "Bottoms" },
   { value: "shoes", label: "Shoes" },
   { value: "accessories", label: "Accessories" },
-  { value: "outerwear", label: "Outerwear" },
-  { value: "dresses", label: "Dresses" },
-  { value: "activewear", label: "Activewear" },
-  { value: "formal", label: "Formal" },
+  { value: "blazer", label: "Blazer" },
 ];
+
+const OCCASION_OPTIONS = ["casual", "formal", "party"] as const;
+
+const COLOR_LABELS: Record<string, string> = {
+  "#000000": "Black",
+  "#ffffff": "White",
+  "#e94560": "Red",
+  "#2d6a4f": "Green",
+  "#3b82f6": "Blue",
+  "#f59e0b": "Yellow",
+  "#8b5cf6": "Purple",
+  "#ec4899": "Pink",
+  "#6b7280": "Gray",
+  "#92400e": "Brown",
+};
+
+const OCCASION_BADGE_STYLES: Record<string, string> = {
+  casual: "bg-[#3b82f6]/20 text-[#93c5fd] border border-[#3b82f6]/30",
+  formal: "bg-[#8b5cf6]/20 text-[#c4b5fd] border border-[#8b5cf6]/30",
+  party: "bg-[#e94560]/20 text-[#f9a8d4] border border-[#e94560]/30",
+};
+
+function buildItemName(colorHex: string, category: ClothingCategory) {
+  const colorName = COLOR_LABELS[colorHex.toLowerCase()] ?? "Custom";
+  const categoryLabel = CATEGORY_OPTIONS.find((opt) => opt.value === category)?.label ?? "Item";
+  return `${colorName} ${categoryLabel}`;
+}
 
 // ── Color swatch ─────────────────────────────────────────
 
@@ -108,8 +134,8 @@ function AddItemModal({
   const webcamRef = useRef<Webcam>(null);
 
   // Tag form state
-  const [name, setName] = useState("");
   const [category, setCategory] = useState<ClothingCategory>("tops");
+  const [occasions, setOccasions] = useState<string[]>(["casual"]);
   const [color, setColor] = useState("#000000");
 
   // ── Auto-detect category from image ──
@@ -130,19 +156,13 @@ function AddItemModal({
         shoes: "shoes", shoe: "shoes", footwear: "shoes",
         accessory: "accessories", accessories: "accessories",
         traditional: "dresses", dress: "dresses", dresses: "dresses",
-        outerwear: "outerwear", jacket: "outerwear",
+        outerwear: "blazer", jacket: "blazer", blazer: "blazer",
         formal: "formal", activewear: "activewear",
       };
       const detected = (data.category || "").toLowerCase();
       const mapped = catMap[detected] || "tops";
       setCategory(mapped);
       if (data.color) setColor(data.color);
-      if (data.name) {
-        setName(data.name);
-      } else {
-        const colorName = data.color || "";
-        setName(`My ${colorName} ${detected.charAt(0).toUpperCase() + detected.slice(1)}`.trim());
-      }
     } catch {
       // Detection failed — user selects manually
     } finally {
@@ -185,15 +205,17 @@ function AddItemModal({
 
   // ── Save item to backend, fallback to local ──
   const handleSave = async () => {
-    if (!imageData || !name.trim() || saving) return;
+    if (!imageData || occasions.length === 0 || saving) return;
+    const generatedName = buildItemName(color, category);
     setSaving(true);
     try {
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
+          name: generatedName,
           category,
+          occasions,
           color,
           imageBase64: imageData,
         }),
@@ -205,8 +227,9 @@ function AddItemModal({
       // Backend down — save locally
       const localItem: BackendItem = {
         _id: `local-${Date.now()}`,
-        name: name.trim(),
+        name: generatedName,
         category,
+        occasions,
         color,
         imageBase64: imageData,
         createdAt: new Date().toISOString(),
@@ -335,32 +358,57 @@ function AddItemModal({
                 </div>
               )}
 
-              {/* Name */}
-              <div>
-                <label className="block text-sm text-[#8899aa] mb-1.5">Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. White Oversized Tee"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1a1a2e] border border-[#233554] text-white text-sm placeholder:text-[#8899aa]/60 focus:border-[#e94560] focus:outline-none transition-colors"
-                />
-              </div>
-
               {/* Category */}
               <div>
                 <label className="block text-sm text-[#8899aa] mb-1.5">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as ClothingCategory)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1a1a2e] border border-[#233554] text-white text-sm focus:border-[#e94560] focus:outline-none transition-colors appearance-none"
-                >
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+                  {CATEGORY_OPTIONS.map((opt) => {
+                    const selected = category === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setCategory(opt.value)}
+                        className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                          selected
+                            ? "bg-[#e94560] border-[#e94560] text-white"
+                            : "bg-[#1a1a2e] border-[#16213e] text-[#8899aa] hover:text-white"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Occasion */}
+              <div>
+                <label className="block text-sm text-[#8899aa] mb-1.5">Occasion</label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {OCCASION_OPTIONS.map((opt) => {
+                    const selected = occasions.includes(opt);
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => {
+                          setOccasions((prev) => {
+                            if (prev.includes(opt)) {
+                              return prev.length === 1 ? prev : prev.filter((item) => item !== opt);
+                            }
+                            return [...prev, opt];
+                          });
+                        }}
+                        className={`py-2.5 rounded-xl border text-sm font-medium capitalize transition-colors ${
+                          selected
+                            ? "bg-[#e94560] border-[#e94560] text-white"
+                            : "bg-[#1a1a2e] border-[#16213e] text-[#8899aa] hover:text-white"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Color picker */}
@@ -399,7 +447,7 @@ function AddItemModal({
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!name.trim() || saving}
+                  disabled={occasions.length === 0 || saving}
                   className="flex-1 py-2.5 rounded-xl bg-[#e94560] text-white text-sm font-medium hover:bg-[#d13a52] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                 >
                   {saving ? (
@@ -621,6 +669,23 @@ export default function WardrobePage() {
                     <ColorSwatch hex={item.color} />
                     <p className="text-[#8899aa] text-xs capitalize">{item.category}</p>
                   </div>
+                  {!!item.occasions?.length && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {item.occasions.map((occasion) => {
+                        const normalized = occasion.toLowerCase();
+                        const style = OCCASION_BADGE_STYLES[normalized];
+                        if (!style) return null;
+                        return (
+                          <span
+                            key={`${item._id}-${normalized}`}
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium capitalize ${style}`}
+                          >
+                            {normalized}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}

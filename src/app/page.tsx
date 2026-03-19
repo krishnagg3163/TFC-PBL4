@@ -453,9 +453,12 @@ export default function Home() {
               >
                 <Play className="w-8 h-8 text-white ml-1" fill="white" />
               </motion.div>
-              <p className="text-[#8899aa] text-sm font-medium">
-                Demo video coming soon
-              </p>
+              <video 
+  className="w-full h-full rounded-xl"
+  controls
+>
+  <source src="/videos/demo.mp4" type="video/mp4" />
+</video>
             </div>
 
             {/* Corner decorations */}
